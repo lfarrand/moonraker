@@ -378,45 +378,54 @@ class Server:
             self.moonraker_app.register_remote_handler(ep)
 
     async def _check_ready(self) -> None:
-        send_id = "identified" not in self.init_list
-        result: Dict[str, Any]
         try:
-            result = await self.klippy_apis.get_klippy_info(send_id)
-        except ServerError as e:
-            if self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
+            send_id = "identified" not in self.init_list
+            result: Dict[str, Any]
+            try:
+                result = await self.klippy_apis.get_klippy_info(send_id)
+            except ServerError as e:
+                if self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
+                        self.init_attempts <= MAX_LOG_ATTEMPTS:
+                    logging.info(
+                        f"{e}\nKlippy info request error.  This indicates that\n"
+                        f"Klippy may have experienced an error during startup.\n"
+                        f"Please check klippy.log for more information")
+                return
+            self.klippy_info = dict(result)
+            self.klippy_state = result.get('state', "unknown")
+            if send_id:
+                logging.info("check_ready 4")
+                self.init_list.append("identified")
+                logging.info("check_ready 5")
+                self.send_event("server:klippy_identified")
+                logging.info("check_ready 6")
+            if self.klippy_state == "ready":
+                logging.info("check_ready 7")
+                await self._verify_klippy_requirements()
+                logging.info("Klippy ready")
+                self.init_list.append('klippy_ready')
+                logging.info("check_ready 8")
+                # register methods with klippy
+                for method in self.klippy_reg_methods:
+                    try:
+                        logging.info("before check_ready klippy_apis.register_method")
+                        await self.klippy_apis.register_method(method)
+                        logging.info("after check_ready klippy_apis.register_method")
+                    except ServerError:
+                        logging.exception(f"Unable to register method '{method}'")
+                self.send_event("server:klippy_ready")
+            elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
                     self.init_attempts <= MAX_LOG_ATTEMPTS:
-                logging.info(
-                    f"{e}\nKlippy info request error.  This indicates that\n"
-                    f"Klippy may have experienced an error during startup.\n"
-                    f"Please check klippy.log for more information")
-            return
-        self.klippy_info = dict(result)
-        self.klippy_state = result.get('state', "unknown")
-        if send_id:
-            logging.info("check_ready 4")
-            self.init_list.append("identified")
-            logging.info("check_ready 5")
-            self.send_event("server:klippy_identified")
-            logging.info("check_ready 6")
-        if self.klippy_state == "ready":
-            logging.info("check_ready 7")
-            await self._verify_klippy_requirements()
-            logging.info("Klippy ready")
-            self.init_list.append('klippy_ready')
-            logging.info("check_ready 8")
-            # register methods with klippy
-            for method in self.klippy_reg_methods:
-                try:
-                    logging.info("before check_ready klippy_apis.register_method")
-                    await self.klippy_apis.register_method(method)
-                    logging.info("after check_ready klippy_apis.register_method")
-                except ServerError:
-                    logging.exception(f"Unable to register method '{method}'")
-            self.send_event("server:klippy_ready")
-        elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
-                self.init_attempts <= MAX_LOG_ATTEMPTS:
-            msg = result.get('state_message', "Klippy Not Ready")
-            logging.info("\n" + msg)
+                msg = result.get('state_message', "Klippy Not Ready")
+                logging.info("\n" + msg)
+        except Exception as e:
+            exception_type, exception_object, exception_traceback = sys.exc_info()
+            filename = exception_traceback.tb_frame.f_code.co_filename
+            line_number = exception_traceback.tb_lineno
+
+            print("Exception type: ", exception_type)
+            print("File name: ", filename)
+            print("Line number: ", line_number)
 
     async def _verify_klippy_requirements(self) -> None:
         result = await self.klippy_apis.get_object_list(default=None)
