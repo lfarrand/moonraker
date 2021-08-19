@@ -388,19 +388,29 @@ class Server:
                     f"Klippy may have experienced an error during startup.\n"
                     f"Please check klippy.log for more information")
             return
+        logging.info("check_ready 1")
         self.klippy_info = dict(result)
+        logging.info("check_ready 2")
         self.klippy_state = result.get('state', "unknown")
+        logging.info("check_ready 3")
         if send_id:
+            logging.info("check_ready 4")
             self.init_list.append("identified")
+            logging.info("check_ready 5")
             self.send_event("server:klippy_identified")
+            logging.info("check_ready 6")
         if self.klippy_state == "ready":
+            logging.info("check_ready 7")
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
             self.init_list.append('klippy_ready')
+            logging.info("check_ready 8")
             # register methods with klippy
             for method in self.klippy_reg_methods:
                 try:
+                    logging.info("before check_ready klippy_apis.register_method")
                     await self.klippy_apis.register_method(method)
+                    logging.info("after check_ready klippy_apis.register_method")
                 except ServerError:
                     logging.exception(f"Unable to register method '{method}'")
             self.send_event("server:klippy_ready")
