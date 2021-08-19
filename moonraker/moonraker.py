@@ -328,7 +328,8 @@ class Server:
         if self.klippy_disconnect_evt is not None:
             self.klippy_disconnect_evt.set()
 
-    async def _initialize(self) -> None:
+    async def _initialize(self) -> None:        
+        logging.info("in initialize()")
         if not self.server_running:
             return
         await self._check_ready()
@@ -337,6 +338,7 @@ class Server:
         # Register "webhooks" subscription
         if "webhooks_sub" not in self.init_list:
             try:
+                logging.info("in initialize webhooks_sub")
                 await self.klippy_apis.subscribe_objects({'webhooks': None})
             except ServerError as e:
                 logging.info(f"{e}\nUnable to subscribe to webhooks object")
@@ -346,6 +348,7 @@ class Server:
         # Subscribe to Gcode Output
         if "gcode_output_sub" not in self.init_list:
             try:
+                logging.info("in initialize gcode_output_sub")
                 await self.klippy_apis.subscribe_gcode_output()
             except ServerError as e:
                 logging.info(
@@ -355,11 +358,13 @@ class Server:
                 self.init_list.append("gcode_output_sub")
         if "klippy_ready" in self.init_list or \
                 not self.klippy_connection.is_connected():
+            logging.info("in initialize klippy_ready")
             # Either Klippy is ready or the connection dropped
             # during initialization.  Exit initialization
             self.init_attempts = 0
             self.init_handle = None
         else:
+            logging.info("in initialize init_attempts")
             self.init_attempts += 1
             self.init_handle = self.event_loop.delay_callback(
                 INIT_TIME, self._initialize)
@@ -373,13 +378,10 @@ class Server:
             self.moonraker_app.register_remote_handler(ep)
 
     async def _check_ready(self) -> None:
-        logging.info("in check_ready()")
         send_id = "identified" not in self.init_list
         result: Dict[str, Any]
         try:
-            logging.info("before call to klippy_apis.get_klippy_info")
             result = await self.klippy_apis.get_klippy_info(send_id)
-            logging.info("after call to klippy_apis.get_klippy_info")
         except ServerError as e:
             if self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
                     self.init_attempts <= MAX_LOG_ATTEMPTS:
@@ -388,11 +390,8 @@ class Server:
                     f"Klippy may have experienced an error during startup.\n"
                     f"Please check klippy.log for more information")
             return
-        logging.info("check_ready 1")
         self.klippy_info = dict(result)
-        logging.info("check_ready 2")
         self.klippy_state = result.get('state', "unknown")
-        logging.info("check_ready 3")
         if send_id:
             logging.info("check_ready 4")
             self.init_list.append("identified")
@@ -644,8 +643,10 @@ class KlippyConnection:
         self.event_loop = event_loop
 
     async def connect(self, address: str) -> bool:
+        logging.info("before connect()")
         ksock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         kstream = iostream.IOStream(ksock)
+        logging.info("after connect()")
         try:
             await kstream.connect(address)
         except iostream.StreamClosedError:
