@@ -373,10 +373,13 @@ class Server:
             self.moonraker_app.register_remote_handler(ep)
 
     async def _check_ready(self) -> None:
+        logging.info("in check_ready()")
         send_id = "identified" not in self.init_list
         result: Dict[str, Any]
         try:
+            logging.info("before call to klippy_apis.get_klippy_info")
             result = await self.klippy_apis.get_klippy_info(send_id)
+            logging.info("after call to klippy_apis.get_klippy_info")
         except ServerError as e:
             if self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
                     self.init_attempts <= MAX_LOG_ATTEMPTS:
