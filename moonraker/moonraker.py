@@ -329,7 +329,7 @@ class Server:
             self.klippy_disconnect_evt.set()
 
     async def _initialize(self) -> None:
-        try
+        try:
             logging.info("in initialize()")
             if not self.server_running:
                 return
