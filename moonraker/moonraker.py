@@ -334,6 +334,7 @@ class Server:
             return
         await self._check_ready()
         await self._request_endpoints()
+        logging.info("after initialize() awaits")
         # Subscribe to "webhooks"
         # Register "webhooks" subscription
         if "webhooks_sub" not in self.init_list:
@@ -368,6 +369,8 @@ class Server:
             self.init_attempts += 1
             self.init_handle = self.event_loop.delay_callback(
                 INIT_TIME, self._initialize)
+
+        logging.info("after initialize()")
 
     async def _request_endpoints(self) -> None:
         result = await self.klippy_apis.list_endpoints(default=None)
