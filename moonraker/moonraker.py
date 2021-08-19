@@ -328,49 +328,58 @@ class Server:
         if self.klippy_disconnect_evt is not None:
             self.klippy_disconnect_evt.set()
 
-    async def _initialize(self) -> None:        
-        logging.info("in initialize()")
-        if not self.server_running:
-            return
-        await self._check_ready()
-        await self._request_endpoints()
-        logging.info("after initialize() awaits")
-        # Subscribe to "webhooks"
-        # Register "webhooks" subscription
-        if "webhooks_sub" not in self.init_list:
-            try:
-                logging.info("in initialize webhooks_sub")
-                await self.klippy_apis.subscribe_objects({'webhooks': None})
-            except ServerError as e:
-                logging.info(f"{e}\nUnable to subscribe to webhooks object")
+    async def _initialize(self) -> None:
+        try
+            logging.info("in initialize()")
+            if not self.server_running:
+                return
+            await self._check_ready()
+            await self._request_endpoints()
+            logging.info("after initialize() awaits")
+            # Subscribe to "webhooks"
+            # Register "webhooks" subscription
+            if "webhooks_sub" not in self.init_list:
+                try:
+                    logging.info("in initialize webhooks_sub")
+                    await self.klippy_apis.subscribe_objects({'webhooks': None})
+                except ServerError as e:
+                    logging.info(f"{e}\nUnable to subscribe to webhooks object")
+                else:
+                    logging.info("Webhooks Subscribed")
+                    self.init_list.append("webhooks_sub")
+            # Subscribe to Gcode Output
+            if "gcode_output_sub" not in self.init_list:
+                try:
+                    logging.info("in initialize gcode_output_sub")
+                    await self.klippy_apis.subscribe_gcode_output()
+                except ServerError as e:
+                    logging.info(
+                        f"{e}\nUnable to register gcode output subscription")
+                else:
+                    logging.info("GCode Output Subscribed")
+                    self.init_list.append("gcode_output_sub")
+            if "klippy_ready" in self.init_list or \
+                    not self.klippy_connection.is_connected():
+                logging.info("in initialize klippy_ready")
+                # Either Klippy is ready or the connection dropped
+                # during initialization.  Exit initialization
+                self.init_attempts = 0
+                self.init_handle = None
             else:
-                logging.info("Webhooks Subscribed")
-                self.init_list.append("webhooks_sub")
-        # Subscribe to Gcode Output
-        if "gcode_output_sub" not in self.init_list:
-            try:
-                logging.info("in initialize gcode_output_sub")
-                await self.klippy_apis.subscribe_gcode_output()
-            except ServerError as e:
-                logging.info(
-                    f"{e}\nUnable to register gcode output subscription")
-            else:
-                logging.info("GCode Output Subscribed")
-                self.init_list.append("gcode_output_sub")
-        if "klippy_ready" in self.init_list or \
-                not self.klippy_connection.is_connected():
-            logging.info("in initialize klippy_ready")
-            # Either Klippy is ready or the connection dropped
-            # during initialization.  Exit initialization
-            self.init_attempts = 0
-            self.init_handle = None
-        else:
-            logging.info("in initialize init_attempts")
-            self.init_attempts += 1
-            self.init_handle = self.event_loop.delay_callback(
-                INIT_TIME, self._initialize)
+                logging.info("in initialize init_attempts")
+                self.init_attempts += 1
+                self.init_handle = self.event_loop.delay_callback(
+                    INIT_TIME, self._initialize)
 
-        logging.info("after initialize()")
+            logging.info("after initialize()")
+        except Exception as e:
+            exception_type, exception_object, exception_traceback = sys.exc_info()
+            filename = exception_traceback.tb_frame.f_code.co_filename
+            line_number = exception_traceback.tb_lineno
+
+            print("Exception type: ", exception_type)
+            print("File name: ", filename)
+            print("Line number: ", line_number)
 
     async def _request_endpoints(self) -> None:
         result = await self.klippy_apis.list_endpoints(default=None)
@@ -396,6 +405,7 @@ class Server:
                 return
             self.klippy_info = dict(result)
             self.klippy_state = result.get('state', "unknown")
+            logging.info(f"klippy_state: {self.klippy_state}")
             if send_id:
                 logging.info("check_ready 4")
                 self.init_list.append("identified")
@@ -416,6 +426,14 @@ class Server:
                         logging.info("after check_ready klippy_apis.register_method")
                     except ServerError:
                         logging.exception(f"Unable to register method '{method}'")
+                    except Exception as e:
+                        exception_type, exception_object, exception_traceback = sys.exc_info()
+                        filename = exception_traceback.tb_frame.f_code.co_filename
+                        line_number = exception_traceback.tb_lineno
+
+                        print("Exception type: ", exception_type)
+                        print("File name: ", filename)
+                        print("Line number: ", line_number)
                 self.send_event("server:klippy_ready")
             elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
                     self.init_attempts <= MAX_LOG_ATTEMPTS:
@@ -470,6 +488,7 @@ class Server:
                                eventtime: float,
                                status: Dict[str, Any]
                                ) -> None:
+        logging.info("in _process_status_update")
         if 'webhooks' in status:
             # XXX - process other states (startup, ready, error, etc)?
             state: Optional[str] = status['webhooks'].get('state', None)
@@ -489,6 +508,7 @@ class Server:
                         conn_status[name] = {
                             k: v for k, v in val.items() if k in fields}
             conn.send_status(conn_status, eventtime)
+        logging.info("after _process_status_update")
 
     async def make_request(self, web_request: WebRequest) -> Any:
         rpc_method = web_request.get_endpoint()
